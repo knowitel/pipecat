@@ -3,7 +3,7 @@ import os
 import aiohttp
 from utils.unit_conversion import convert_kelvin
 
-async def fetch_weather_from_api(args):
+async def fetch_weather_from_api(llm, args):
     location = args.get("location")
     temp_format = args.get("format")
 

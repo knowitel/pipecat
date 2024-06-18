@@ -8,7 +8,7 @@ from pipecat.frames.frames import AudioRawFrame, Frame
 from openai import OpenAI
 from loguru import logger
 
-from src.pipecat.services.ai_services import TTSService
+from pipecat.services.ai_services import TTSService
 
 
 def elevenlabs_tts(session):
@@ -26,7 +26,7 @@ class OpenAITTSService(TTSService):
             aiohttp_session: aiohttp.ClientSession,
             api_key: str,
             voice_id: str = "alloy",
-            model: str = "tts-1-hd",
+            model: str = "tts-1",
             **kwargs):
         super().__init__(**kwargs)
         self._api_key = api_key
@@ -40,15 +40,18 @@ class OpenAITTSService(TTSService):
     async def run_tts(self, text: str) -> AsyncGenerator[Frame, None]:
         logger.debug(f"Generating TTS: [{text}]")
         client = OpenAI()
-        response = client.audio.speech.create(
+        with client.audio.speech.with_streaming_response.create(
             model=self._model,
             voice=self._voice_id,
             input=text,
             response_format='pcm',
             speed=1.5
-        )
-        frame = AudioRawFrame(response.content, 16000, 1)
-        yield frame
+        ) as response:
+            for chunk in response.iter_bytes(chunk_size=2048):
+                    if len(chunk) > 0:
+                        frame = AudioRawFrame(chunk, 16000, 1)
+                        yield frame
+
 
 
 
