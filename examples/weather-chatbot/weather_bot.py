@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.task import PipelineTask, PipelineParams
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
 from pipecat.vad.silero import SileroVADAnalyzer
@@ -25,7 +25,7 @@ load_dotenv(override=True)
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
-TTS_SERVICE = os.getenv("TTS_SERVICE", "openai")
+TTS_SERVICE = os.getenv("TTS_SERVICE", "elevenlabs")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
@@ -86,10 +86,6 @@ async def main(room_url: str, token):
             # Defaults to OpenAI TTS
             tts = openai_tts(session)
 
-        # Create the task pipeline
-        pipeline = await task_pipeline(system_context, llm, transport, tts)
-        task = PipelineTask(pipeline)
-
         @transport.event_handler("on_first_participant_joined")
         async def on_first_participant_joined(transport, participant):
             """Greet the user when they join the call"""
@@ -97,6 +93,9 @@ async def main(room_url: str, token):
             global username
             username = await greet_user(participant=participant, llm=llm, tts=tts)
 
+        # Create the task pipeline + params
+        pipeline = await task_pipeline(system_context, llm, transport, tts)
+        task = PipelineTask(pipeline, PipelineParams(allow_interruptions=True))
         # Start the in/out audio transport pipeline with updated context
         runner = PipelineRunner()
         await runner.run(task)
