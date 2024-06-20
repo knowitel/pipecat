@@ -6,23 +6,19 @@ import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.frames.frames import TextFrame
-from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
-from pipecat.processors.aggregators.llm_response import (
-    LLMAssistantContextAggregator,
-    LLMUserContextAggregator,
-)
-from pipecat.processors.logger import FrameLogger
-from pipecat.services.openai import OpenAILLMContext, OpenAILLMService
+from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
 from pipecat.vad.silero import SileroVADAnalyzer
 
 from runner import configure
 from services.tts_service import elevenlabs_tts, openai_tts
-from services.weather_service import fetch_weather_from_api
+from services.weather_service import fetch_current_weather_from_api, fetch_forecast_weather_from_api
 from utils.llm_context import llm_context
-from utils.user_profile import get_user_profile
+from utils.user_message import greet_user
+from utils.task_pipeline import task_pipeline
+from prompts.prompts import weather_bot_prompt
 
 load_dotenv(override=True)
 
@@ -32,6 +28,7 @@ logger.add(sys.stderr, level="DEBUG")
 TTS_SERVICE = os.getenv("TTS_SERVICE", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# These would need to be handled on a data level in a real-world application
 username = None
 location = None
 
@@ -45,6 +42,7 @@ async def start_fetch_weather(llm):
 
 async def main(room_url: str, token):
     async with aiohttp.ClientSession() as session:
+
         transport = DailyTransport(
             room_url,
             token,
@@ -56,60 +54,44 @@ async def main(room_url: str, token):
                 vad_analyzer=SileroVADAnalyzer(),
             ),
         )
+        # Choose the TTS service
         if TTS_SERVICE == "elevenlabs":
             tts = elevenlabs_tts(session)
         else:
+            # Defaults to OpenAI TTS
             tts = openai_tts(session)
 
+        # Create the LLM Context (system prompt + tools)
+        prompt = weather_bot_prompt()
+        system_context = await llm_context(prompt=prompt)
+
+        # Set LLM provider & function call
         llm = OpenAILLMService(api_key=OPENAI_API_KEY, model="gpt-4o")
+
         llm.register_function(
             "get_current_weather",
-            fetch_weather_from_api,
+            fetch_current_weather_from_api,
+            start_callback=start_fetch_weather,
+        )
+        llm.register_function(
+            "get_forecast_weather",
+            fetch_forecast_weather_from_api,
             start_callback=start_fetch_weather,
         )
 
-        fl_in = FrameLogger("Inner")
-        fl_out = FrameLogger("Outer")
-
-        context = await llm_context()
-        tma_in = LLMUserContextAggregator(context)
-        tma_out = LLMAssistantContextAggregator(context)
-        pipeline = Pipeline(
-            [
-                fl_in,
-                transport.input(),
-                tma_in,
-                llm,
-                fl_out,
-                tts,
-                transport.output(),
-                tma_out,
-            ]
-        )
-
+        # Create the pipeline to run all the above as an async task with our context
+        pipeline = await task_pipeline(system_context, llm, transport, tts)
         task = PipelineTask(pipeline)
 
         @transport.event_handler("on_first_participant_joined")
         async def on_first_participant_joined(transport, participant):
+            """Greet the user when they join the call"""
             transport.capture_participant_transcription(participant["id"])
             global username
-            global location
-            username = participant.get("info").get("userName")
-            user = get_user_profile(username)
-            if user:
-                location = user.location
-                await llm.push_frame(
-                    TextFrame(
-                        f"Welcome back {username}! Do you need a weather update for {location} or anywhere else?"
-                    )
-                )
-            else:
-                await tts.say(
-                    f"Hi {username}! Ask me about the weather anywhere in the world."
-                )
+            username = await greet_user(participant=participant, llm=llm, tts=tts)
 
+        # Start the listening pipeline
         runner = PipelineRunner()
-
         await runner.run(task)
 
 
