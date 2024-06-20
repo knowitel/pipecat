@@ -27,6 +27,7 @@ logger.add(sys.stderr, level="DEBUG")
 
 TTS_SERVICE = os.getenv("TTS_SERVICE", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
 # These would need to be handled on a data level in a real-world application
 username = None
@@ -43,30 +44,15 @@ async def start_fetch_weather(llm):
 async def main(room_url: str, token):
     async with aiohttp.ClientSession() as session:
 
-        transport = DailyTransport(
-            room_url,
-            token,
-            "Respond bot",
-            DailyParams(
-                audio_out_enabled=True,
-                transcription_enabled=True,
-                vad_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(),
-            ),
-        )
-        # Choose the TTS service
-        if TTS_SERVICE == "elevenlabs":
-            tts = elevenlabs_tts(session)
-        else:
-            # Defaults to OpenAI TTS
-            tts = openai_tts(session)
-
         # Create the LLM Context (system prompt + tools)
         prompt = weather_bot_prompt()
         system_context = await llm_context(prompt=prompt)
 
         # Set LLM provider & function call
-        llm = OpenAILLMService(api_key=OPENAI_API_KEY, model="gpt-4o")
+        if LLM_PROVIDER == 'openai':
+            llm = OpenAILLMService(api_key=OPENAI_API_KEY, model="gpt-4o")
+        else:
+            raise NotImplementedError("LLM Provider not implemented")
 
         llm.register_function(
             "get_current_weather",
@@ -79,7 +65,28 @@ async def main(room_url: str, token):
             start_callback=start_fetch_weather,
         )
 
-        # Create the pipeline to run all the above as an async task with our context
+        # Create the audio transport connection and set up the pipeline
+
+        transport = DailyTransport(
+            room_url,
+            token,
+            "Respond bot",
+            DailyParams(
+                audio_out_enabled=True,
+                transcription_enabled=True,
+                vad_enabled=True,
+                vad_analyzer=SileroVADAnalyzer(),
+            ),
+        )
+
+        # Choose the TTS service for Assistant
+        if TTS_SERVICE == "elevenlabs":
+            tts = elevenlabs_tts(session)
+        else:
+            # Defaults to OpenAI TTS
+            tts = openai_tts(session)
+
+        # Create the task pipeline
         pipeline = await task_pipeline(system_context, llm, transport, tts)
         task = PipelineTask(pipeline)
 
@@ -90,7 +97,7 @@ async def main(room_url: str, token):
             global username
             username = await greet_user(participant=participant, llm=llm, tts=tts)
 
-        # Start the listening pipeline
+        # Start the in/out audio transport pipeline with updated context
         runner = PipelineRunner()
         await runner.run(task)
 
