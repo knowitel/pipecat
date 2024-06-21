@@ -13,7 +13,5 @@ async def greet_user(participant, tts, llm):
             )
         )
     else:
-        await tts.say(
-            f"Hi {username}! Ask me about the weather anywhere in the world."
-        )
+        await tts.say(f"Hi {username}! Ask me about the weather anywhere in the world.")
     return username

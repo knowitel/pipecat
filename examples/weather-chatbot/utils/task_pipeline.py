@@ -1,6 +1,8 @@
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.task import PipelineParams
-from pipecat.processors.aggregators.llm_response import LLMUserContextAggregator, LLMAssistantContextAggregator
+from pipecat.processors.aggregators.llm_response import (
+    LLMUserContextAggregator,
+    LLMAssistantContextAggregator,
+)
 from pipecat.processors.logger import FrameLogger
 
 
@@ -21,6 +23,6 @@ async def task_pipeline(context, llm, transport, tts):
             audio_frames_logger_out,
             tts,
             transport.output(),
-            assistant_conversation_context
+            assistant_conversation_context,
         ],
     )

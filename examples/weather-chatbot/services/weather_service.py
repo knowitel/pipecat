@@ -42,7 +42,7 @@ async def fetch_forecast_weather_from_api(llm, args):
 
     forecast = {}
     for item in data["list"]:
-        date = datetime.utcfromtimestamp(item["dt"]).strftime('%d-%m-%Y')
+        date = datetime.utcfromtimestamp(item["dt"]).strftime("%d-%m-%Y")
         temperature_kelvin = item["main"]["temp"]
         temp = convert_kelvin(temp_format, temperature_kelvin)
         conditions = item["weather"][0]["description"]

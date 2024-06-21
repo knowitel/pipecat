@@ -25,7 +25,7 @@ load_dotenv(override=True)
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
-TTS_SERVICE = os.getenv("TTS_SERVICE", "elevenlabs")
+TTS_SERVICE = os.getenv("TTS_SERVICE", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
