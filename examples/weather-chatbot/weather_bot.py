@@ -28,9 +28,10 @@ logger.add(sys.stderr, level="DEBUG")
 TTS_SERVICE = os.getenv("TTS_SERVICE", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+USER_PROFILE =   False if os.getenv("USER_PROFILE", 'on') == 'off' else True
 
 # These would need to be handled on a data level in a real-world application
-username = None
+username = 'John Doe'
 location = None
 
 
@@ -91,7 +92,8 @@ async def main(room_url: str, token):
             """Greet the user when they join the call"""
             transport.capture_participant_transcription(participant["id"])
             global username
-            username = await greet_user(participant=participant, llm=llm, tts=tts)
+            if USER_PROFILE:
+                username = await greet_user(participant=participant, llm=llm, tts=tts)
 
         # Create the task pipeline + params
         pipeline = await task_pipeline(system_context, llm, transport, tts)
